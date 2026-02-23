@@ -27,20 +27,21 @@ const Login = () => {
         password,
       });
 
-      if (authError) {
-        setError('Email atau password salah');
+      if (authError || !authData.user) {
+        setError('Login gagal. Periksa email dan password Anda.');
         setLoading(false);
         return;
       }
 
-      const { data: userData, error: userError } = await supabase
+      const { data: userData } = await supabase
         .from('users')
         .select('*')
         .eq('id', authData.user.id)
         .single();
 
-      if (userError || !userData) {
-        setError('Data pengguna tidak ditemukan');
+      if (!userData) {
+        setError('Login gagal. Periksa email dan password Anda.');
+        await supabase.auth.signOut();
         setLoading(false);
         return;
       }
