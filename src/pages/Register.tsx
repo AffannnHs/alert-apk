@@ -4,7 +4,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowLeft, Eye, EyeOff, MapPin } from 'lucide-react';
+import { z } from 'zod';
+
+const registerSchema = z.object({
+  name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(100, 'Nama terlalu panjang'),
+  email: z.string().trim().email('Format email tidak valid').max(255, 'Email terlalu panjang'),
+  phone: z.string().regex(/^\+?[0-9]{10,15}$/, 'Format nomor HP tidak valid (10-15 digit)'),
+  password: z.string().min(8, 'Password minimal 8 karakter').max(128, 'Password terlalu panjang'),
+});
 
 const Register = () => {
   const navigate = useNavigate();
@@ -15,6 +24,7 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [locationConsent, setLocationConsent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -22,12 +32,19 @@ const Register = () => {
     e.preventDefault();
     setError('');
 
-    if (password.length < 8) {
-      setError('Password minimal 8 karakter');
-      return;
-    }
     if (password !== confirmPassword) {
       setError('Password tidak cocok');
+      return;
+    }
+
+    const validation = registerSchema.safeParse({ name, email: email.trim(), phone, password });
+    if (!validation.success) {
+      setError(validation.error.errors[0].message);
+      return;
+    }
+
+    if (!locationConsent) {
+      setError('Anda harus menyetujui penggunaan lokasi');
       return;
     }
 
@@ -130,9 +147,25 @@ const Register = () => {
             </div>
           </div>
 
-          <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3">
-            <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-info-blue" />
-            <p className="text-xs text-muted-foreground">Lokasi saat mendaftar akan direkam untuk verifikasi</p>
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3">
+              <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-info-blue" />
+              <div className="text-xs text-muted-foreground">
+                <p className="font-semibold mb-1">Persetujuan Lokasi</p>
+                <p>Sistem ini menggunakan lokasi Anda untuk:</p>
+                <ul className="list-disc list-inside mt-1">
+                  <li>Verifikasi pendaftaran</li>
+                  <li>Koordinasi respons darurat</li>
+                </ul>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <Checkbox
+                checked={locationConsent}
+                onCheckedChange={(checked) => setLocationConsent(checked === true)}
+              />
+              <span className="text-xs text-muted-foreground">Saya setuju untuk berbagi lokasi saya</span>
+            </label>
           </div>
 
           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
