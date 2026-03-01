@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_responders: {
+        Row: {
+          acknowledged_at: string | null
+          alert_id: string
+          arrived_at: string | null
+          created_at: string
+          en_route_at: string | null
+          id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          alert_id: string
+          arrived_at?: string | null
+          created_at?: string
+          en_route_at?: string | null
+          id?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          alert_id?: string
+          arrived_at?: string | null
+          created_at?: string
+          en_route_at?: string | null
+          id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_responders_alert_id_fkey"
+            columns: ["alert_id"]
+            isOneToOne: false
+            referencedRelation: "alerts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alerts: {
         Row: {
           address: string | null
@@ -227,6 +268,9 @@ export type Database = {
     }
     Functions: {
       bootstrap_first_super_admin: { Args: never; Returns: boolean }
+      get_my_group: { Args: never; Returns: string }
+      get_my_role: { Args: never; Returns: string }
+      get_my_status: { Args: never; Returns: string }
       is_active_admin: { Args: never; Returns: boolean }
     }
     Enums: {

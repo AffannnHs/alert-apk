@@ -12,6 +12,7 @@ import Register from './pages/Register';
 import Pending from './pages/Pending';
 import Home from './pages/Home';
 import Alerts from './pages/Alerts';
+import AlertDetail from './pages/AlertDetail';
 import MapPage from './pages/MapPage';
 import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
@@ -72,6 +73,7 @@ const App = () => (
             <Route path="/pending" element={<Pending />} />
             <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
             <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
+            <Route path="/alerts/:id" element={<ProtectedRoute><AlertDetail /></ProtectedRoute>} />
             <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
