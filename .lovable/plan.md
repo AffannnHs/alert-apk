@@ -1,38 +1,62 @@
 
 
-## Masalah yang Ditemukan
+# Emergency Alert System — Implementation Plan
 
-Berdasarkan screenshot dan log, masalah utamanya adalah:
+## Phase 1: Foundation — Auth, Theme & Navigation
+- Set up dark theme color system (#0f1117 background, emergency red accents)
+- Add mobile viewport meta tags for Android optimization
+- Install Zustand for state management
+- Create **Login page** with siren icon + red glow, email/password fields, show/hide toggle
+- Create **Register page** with 5 fields (name, email, phone, password, confirm) + GPS location capture
+- Create **Pending page** with refresh status functionality
+- Build auth store (Zustand) with session persistence
+- Create protected route wrapper with loading spinner
+- Build **Bottom Navigation** (Home, Alerts, Map, Profile) fixed at bottom, 64px height
 
-1. **"email rate limit exceeded"** - Anda sudah pernah mendaftar dengan email `affanharissaputra03@gmail.com` sebelumnya dan Supabase membatasi pengiriman email konfirmasi. Ini bukan bug data gagal disimpan, tapi rate limit dari Supabase.
+## Phase 2: Home & Panic Button
+- Build **Home page** with greeting header, date, GPS mode indicator
+- Create **Panic Button** — large red circle (w-44 h-44) with pulse animation
+- Implement 3-second hold mechanic with SVG progress ring
+- Add phone vibration on trigger completion
+- Build **Emergency Type Modal** — 5 options grid (Fire, Medical, Crime, Disaster, Help)
+- Description form + GPS capture → insert alert to Supabase
+- Show active alerts section with real-time subscription
+- Display online members with avatars
 
-2. **Pesan error tidak user-friendly** - Error ditampilkan dalam bahasa Inggris teknis, perlu diterjemahkan ke Bahasa Indonesia yang mudah dipahami.
+## Phase 3: Alerts List & Detail with Chat
+- **Database**: Create `alert_responders` table with columns (alert_id, user_id, status, acknowledged_at, arrived_at) + RLS policies
+- Build **Alerts page** with Aktif/Riwayat tabs, alert cards with severity border colors
+- Build **Alert Detail page** with INFO and CHAT tabs
+- INFO tab: alert details, 3-step response status buttons (Acknowledged → En Route → Arrived)
+- CHAT tab: real-time messaging with left/right/system bubbles, auto-scroll, Supabase realtime subscription
 
-## Solusi
+## Phase 4: Team Map
+- Install Leaflet + react-leaflet
+- Build **Map page** with satellite tile layer (Esri), bounded to Indonesia
+- Custom markers: blue (coordinator), green (member), red pulsing (active alerts)
+- My position marker (larger blue)
+- Member list below map with distance calculation (Haversine)
+- Tap member → fly to their location on map
+- Background GPS update to Supabase every 5 minutes
 
-### 1. Perbaiki error handling di Register.tsx
+## Phase 5: Profile & Settings
+- Build **Profile page** with avatar (initials), role badge, contact info
+- Show stats from database (alerts responded, alerts triggered)
+- Notification toggle (localStorage)
+- Change password modal with validation
+- Logout with confirmation dialog
 
-Tambahkan mapping error message dari Supabase ke Bahasa Indonesia:
+## Phase 6: Real-time Notifications
+- Request browser notification permission on login
+- Global Supabase realtime listener for new alerts → browser notification + in-app banner
+- In-app alert banner: slides from top, auto-dismiss 8 seconds with countdown bar
+- Badge count on Alerts tab and bell icon (unacknowledged alerts)
 
-- `"email rate limit exceeded"` -> `"Terlalu banyak percobaan. Coba lagi dalam beberapa menit."`
-- `"User already registered"` -> `"Email sudah terdaftar. Silakan login."`
-- Error lainnya tetap ditampilkan dengan fallback generic
+## Phase 7: Polish & PWA
+- Loading skeletons for all data-fetching screens
+- Empty states with emoji illustrations
+- Offline detection banner
+- Pull-to-refresh on Home and Alerts
+- PWA manifest + icons for "Add to Home Screen"
+- Ensure all touch targets ≥ 44px, font ≥ 14px, no horizontal overflow, bottom padding for nav
 
-### 2. Perbaiki error handling di EmergencyTypeModal.tsx
-
-Tambahkan pesan error yang lebih jelas jika gagal menyimpan alert, termasuk menampilkan detail error dari Supabase.
-
-## Detail Teknis
-
-File yang diubah:
-- **src/pages/Register.tsx** - Tambah fungsi `translateError()` untuk mapping error Supabase ke Bahasa Indonesia
-- **src/components/EmergencyTypeModal.tsx** - Perbaiki error handling saat insert alert gagal, tampilkan pesan yang lebih informatif
-
-```text
-Error Flow:
-Supabase Auth Error -> translateError() -> Pesan Indonesia -> Ditampilkan ke user
-```
-
-### Catatan Penting
-- Email `affanharissaputra03@gmail.com` sudah terdaftar di sistem. Untuk login, Anda perlu mengkonfirmasi email terlebih dahulu (cek inbox/spam), atau tunggu beberapa menit lalu coba daftar lagi.
-- Jika ingin test dengan akun baru, gunakan email yang berbeda.
