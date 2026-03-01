@@ -1,18 +1,32 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Key, Bell, BellOff, ChevronRight, Info } from 'lucide-react';
-import BottomNavigation from '@/components/BottomNavigation';
+import { LogOut, Key, Bell, BellOff, ChevronRight, Info, User, Mail, Phone, Shield } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { toast } from 'sonner';
 
 const roleBadge: Record<string, string> = {
-  SUPER_ADMIN: 'bg-[hsl(var(--emergency))]',
-  ADMIN: 'bg-[hsl(var(--warning-orange))]',
-  COORDINATOR: 'bg-[hsl(var(--info-blue))]',
-  MEMBER: 'bg-[hsl(var(--success))]',
+  SUPER_ADMIN: 'bg-destructive/10 text-destructive border-destructive/20',
+  ADMIN: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  COORDINATOR: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  MEMBER: 'bg-green-500/10 text-green-500 border-green-500/20',
 };
 
 const Profile = () => {
@@ -33,7 +47,7 @@ const Profile = () => {
     const fetchStats = async () => {
       const [sent, responded] = await Promise.all([
         supabase.from('alerts').select('id', { count: 'exact', head: true }).eq('triggered_by', user.id),
-        supabase.from('alert_responders' as any).select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('alert_responders').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
       ]);
       setStats({
         alertSent: sent.count || 0,
@@ -48,11 +62,10 @@ const Profile = () => {
     return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   };
 
-  const toggleNotif = async () => {
-    const newVal = !notifEnabled;
-    setNotifEnabled(newVal);
-    localStorage.setItem('notif_enabled', String(newVal));
-    if (newVal && 'Notification' in window) {
+  const toggleNotif = async (checked: boolean) => {
+    setNotifEnabled(checked);
+    localStorage.setItem('notif_enabled', String(checked));
+    if (checked && 'Notification' in window) {
       await Notification.requestPermission();
     }
   };
@@ -87,151 +100,180 @@ const Profile = () => {
   };
 
   const handleLogout = () => {
-    if (window.confirm('Yakin ingin keluar?')) {
       supabase.auth.signOut().then(() => {
         useAuthStore.getState().logout();
         navigate('/login');
       });
-    }
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background pb-20">
-      <div className="px-5 pt-6">
-        <h1 className="text-lg font-bold text-foreground">👤 Profil Saya</h1>
+    <div className="flex flex-col gap-6 pb-20 lg:pb-0">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight">Profil Pengguna</h1>
+        <p className="text-muted-foreground">Kelola informasi akun dan preferensi Anda.</p>
       </div>
 
-      {/* Avatar + Name */}
-      <div className="mt-6 flex flex-col items-center gap-2">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[hsl(var(--emergency))] text-2xl font-bold text-[hsl(var(--emergency-foreground))]">
-          {getInitials(user?.name)}
-        </div>
-        <p className="text-xl font-bold text-foreground">{user?.name || 'User'}</p>
-        {user?.role && (
-          <span className={`rounded-full px-3 py-0.5 text-xs font-semibold text-foreground ${roleBadge[user.role] || 'bg-secondary'}`}>
-            {user.role}
-          </span>
-        )}
-        <p className="text-xs text-[hsl(var(--success))]">🟢 Aktif</p>
+      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-3">
+         {/* Left Column: Identity Card */}
+         <Card className="lg:col-span-1 h-fit">
+            <CardHeader className="text-center pb-2">
+                <div className="mx-auto mb-4 relative">
+                    <Avatar className="h-24 w-24 border-4 border-background shadow-xl">
+                        <AvatarImage src="" />
+                        <AvatarFallback className="text-2xl bg-primary/10 text-primary font-bold">
+                            {getInitials(user?.name)}
+                        </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute bottom-0 right-0 h-6 w-6 rounded-full bg-green-500 border-4 border-background" title="Online"></div>
+                </div>
+                <CardTitle className="text-xl">{user?.name || 'User'}</CardTitle>
+                <CardDescription className="flex justify-center gap-2 mt-1">
+                     {user?.role && (
+                        <Badge variant="outline" className={`${roleBadge[user.role]} px-2 py-0.5`}>
+                            {user.role}
+                        </Badge>
+                     )}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Mail className="h-4 w-4" /> Email
+                    </div>
+                    <p className="font-medium text-sm">{user?.email || '-'}</p>
+                </div>
+                <Separator />
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Phone className="h-4 w-4" /> Telepon
+                    </div>
+                    <p className="font-medium text-sm">{user?.phone || '-'}</p>
+                </div>
+                <Separator />
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div className="text-center p-3 rounded-lg bg-secondary/50">
+                        <p className="text-2xl font-bold">{stats.alertSent}</p>
+                        <p className="text-xs text-muted-foreground">Alert Dikirim</p>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-secondary/50">
+                        <p className="text-2xl font-bold">{stats.alertResponded}</p>
+                        <p className="text-xs text-muted-foreground">Alert Direspons</p>
+                    </div>
+                </div>
+            </CardContent>
+            <CardFooter>
+                 <Button variant="destructive" className="w-full" onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" /> Keluar
+                 </Button>
+            </CardFooter>
+         </Card>
+
+         {/* Right Column: Settings */}
+         <div className="lg:col-span-2 space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                        <Shield className="h-5 w-5" /> Keamanan & Akun
+                    </CardTitle>
+                    <CardDescription>Pengaturan keamanan dan password akun Anda.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between p-2 rounded-lg border bg-card">
+                         <div className="space-y-0.5">
+                            <Label className="text-base">Password</Label>
+                            <p className="text-sm text-muted-foreground">Ganti password akun Anda secara berkala.</p>
+                         </div>
+                         <Dialog open={showPasswordModal} onOpenChange={setShowPasswordModal}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                    <Key className="mr-2 h-4 w-4" /> Ganti Password
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Ganti Password</DialogTitle>
+                                    <DialogDescription>
+                                        Masukkan password lama dan password baru Anda.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4 py-4">
+                                    <div className="space-y-2">
+                                        <Label>Password Lama</Label>
+                                        <Input
+                                            type="password"
+                                            value={oldPassword}
+                                            onChange={(e) => setOldPassword(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Password Baru</Label>
+                                        <Input
+                                            type="password"
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Konfirmasi Password Baru</Label>
+                                        <Input
+                                            type="password"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setShowPasswordModal(false)}>Batal</Button>
+                                    <Button onClick={handleChangePassword} disabled={changing}>
+                                        {changing ? 'Menyimpan...' : 'Simpan Perubahan'}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                         </Dialog>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                        <Bell className="h-5 w-5" /> Notifikasi
+                    </CardTitle>
+                    <CardDescription>Atur preferensi notifikasi aplikasi.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between p-2">
+                        <div className="space-y-0.5">
+                            <Label className="text-base">Push Notifications</Label>
+                            <p className="text-sm text-muted-foreground">Terima notifikasi untuk alert darurat.</p>
+                        </div>
+                        <Switch checked={notifEnabled} onCheckedChange={toggleNotif} />
+                    </div>
+                </CardContent>
+            </Card>
+
+             <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                        <Info className="h-5 w-5" /> Tentang Aplikasi
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                    <div className="flex justify-between text-sm py-2 border-b">
+                        <span className="text-muted-foreground">Versi Aplikasi</span>
+                        <span className="font-medium">1.0.0</span>
+                    </div>
+                    <div className="flex justify-between text-sm py-2 border-b">
+                        <span className="text-muted-foreground">Build</span>
+                        <span className="font-medium">Production</span>
+                    </div>
+                    <div className="pt-4 text-xs text-muted-foreground text-center">
+                        &copy; 2024 Alert App Team. All rights reserved.
+                    </div>
+                </CardContent>
+            </Card>
+         </div>
       </div>
-
-      {/* Contact Info */}
-      <div className="mx-5 mt-6">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Info Kontak</p>
-        <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-          <p className="text-sm text-foreground">📧 {user?.email || '-'}</p>
-          <p className="text-sm text-foreground">📱 {user?.phone || '-'}</p>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="mx-5 mt-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Statistik</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-border bg-card p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{stats.alertSent}</p>
-            <p className="text-xs text-muted-foreground">Alert Dikirim</p>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{stats.alertResponded}</p>
-            <p className="text-xs text-muted-foreground">Alert Direspons</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Settings */}
-      <div className="mx-5 mt-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pengaturan</p>
-        <div className="rounded-xl border border-border bg-card divide-y divide-border">
-          <button
-            onClick={toggleNotif}
-            className="flex w-full items-center justify-between px-4 py-3"
-          >
-            <span className="flex items-center gap-2 text-sm text-foreground">
-              {notifEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-              Notifikasi
-            </span>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              notifEnabled ? 'bg-[hsl(var(--success))]/20 text-[hsl(var(--success))]' : 'bg-secondary text-muted-foreground'
-            }`}>
-              {notifEnabled ? 'ON' : 'OFF'}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* Account */}
-      <div className="mx-5 mt-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Akun</p>
-        <div className="rounded-xl border border-border bg-card divide-y divide-border">
-          <button
-            onClick={() => setShowPasswordModal(true)}
-            className="flex w-full items-center justify-between px-4 py-3"
-          >
-            <span className="flex items-center gap-2 text-sm text-foreground">
-              <Key className="h-4 w-4" /> Ganti Password
-            </span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </button>
-          <div className="flex items-center justify-between px-4 py-3">
-            <span className="flex items-center gap-2 text-sm text-foreground">
-              <Info className="h-4 w-4" /> Versi Aplikasi
-            </span>
-            <span className="text-xs text-muted-foreground">1.0.0</span>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex w-full items-center justify-between px-4 py-3"
-          >
-            <span className="flex items-center gap-2 text-sm text-[hsl(var(--emergency))]">
-              <LogOut className="h-4 w-4" /> Keluar
-            </span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </div>
-      </div>
-
-      {/* Password Modal */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setShowPasswordModal(false)}>
-          <div
-            className="w-full max-w-md rounded-t-2xl border-t border-border bg-card p-6 animate-in slide-in-from-bottom"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="mb-4 text-lg font-bold text-foreground">🔑 Ganti Password</h3>
-            <div className="space-y-3">
-              <Input
-                type="password"
-                placeholder="Password Lama"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-              />
-              <Input
-                type="password"
-                placeholder="Password Baru (min 8 karakter)"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-              <Input
-                type="password"
-                placeholder="Konfirmasi Password Baru"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-            </div>
-            <div className="mt-4 flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => setShowPasswordModal(false)}>
-                Batal
-              </Button>
-              <Button className="flex-1" onClick={handleChangePassword} disabled={changing}>
-                {changing ? 'Menyimpan...' : 'Simpan'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <BottomNavigation />
     </div>
   );
 };

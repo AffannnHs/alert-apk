@@ -2,12 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import BottomNavigation from '@/components/BottomNavigation';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/integrations/supabase/client';
+import type { Tables } from '@/integrations/supabase/types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Locate, Layers, User, Navigation } from 'lucide-react';
 
 // Fix Leaflet default icon
-delete (L.Icon.Default.prototype as any)._getIconUrl;
+delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
@@ -60,13 +65,17 @@ const getInitials = (name: string | null) => {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 };
 
+type DbUser = Tables<"users">;
+type MemberRow = Pick<DbUser, "id" | "name" | "role" | "status" | "last_lat" | "last_lng">;
+type AlertRow = Tables<"alerts">;
+
 const MapPage = () => {
   const user = useAuthStore((s) => s.user);
   const [myPosition, setMyPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number } | null>(null);
-  const [members, setMembers] = useState<any[]>([]);
-  const [activeAlerts, setActiveAlerts] = useState<any[]>([]);
-  const [isSatellite, setIsSatellite] = useState(true);
+  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [activeAlerts, setActiveAlerts] = useState<AlertRow[]>([]);
+  const [isSatellite, setIsSatellite] = useState(false);
 
   const fetchMembers = useCallback(async () => {
     if (!user) return;
@@ -114,110 +123,119 @@ const MapPage = () => {
     : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   return (
-    <div className="flex min-h-screen flex-col bg-background pb-20">
-      <div className="px-5 pt-6 pb-2">
-        <h1 className="text-lg font-bold text-foreground">🗺️ Peta Tim</h1>
-        <p className="text-xs text-muted-foreground">
-          {members.length} anggota • diperbarui 30 dtk
-        </p>
-      </div>
-
-      {/* Map */}
-      <div className="relative mx-3">
-        <MapContainer
-          center={[-2.5, 118.0]}
-          zoom={5}
-          minZoom={5}
-          maxZoom={18}
-          maxBounds={[[-12, 94], [8, 142]]}
-          maxBoundsViscosity={1.0}
-          style={{ height: '60vh', width: '100%', borderRadius: '0.75rem' }}
-        >
-          <TileLayer url={tileUrl} attribution="Tiles © Esri / OSM" />
-          <MapController myPosition={myPosition} flyTo={flyTo} />
-
-          {/* My marker */}
-          {myPosition && (
-            <Marker position={[myPosition.lat, myPosition.lng]} icon={createIcon('📍', 'hsl(217 91% 60%)', 44)}>
-              <Popup><div className="text-sm font-semibold">{user?.name}<br /><span className="text-xs text-muted-foreground">Anda</span></div></Popup>
-            </Marker>
-          )}
-
-          {/* Members */}
-          {members.map((m: any) => m.last_lat && m.last_lng && (
-            <Marker
-              key={m.id}
-              position={[m.last_lat, m.last_lng]}
-              icon={createIcon(getInitials(m.name), m.role === 'COORDINATOR' ? 'hsl(217 91% 60%)' : 'hsl(142 71% 45%)', 36)}
-            >
-              <Popup><div className="text-sm"><b>{m.name}</b><br /><span className="text-xs">{m.role}</span></div></Popup>
-            </Marker>
-          ))}
-
-          {/* Active alerts */}
-          {activeAlerts.map((a: any) => a.lat && a.lng && (
-            <Marker key={a.id} position={[a.lat, a.lng]} icon={createAlertIcon(a.type)}>
-              <Popup>
-                <div className="text-sm">
-                  <b style={{ color: 'hsl(0 84% 60%)' }}>⚠️ {a.type}</b><br />
-                  <span>{a.severity}</span><br />
-                  <span className="text-xs">{a.description || ''}</span>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
-
-        {/* FAB */}
-        <div className="absolute bottom-4 right-4 z-[1000] flex flex-col gap-2">
-          <button
-            onClick={() => myPosition && setFlyTo({ ...myPosition })}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-lg shadow-lg"
-          >
-            📍
-          </button>
-          <button
-            onClick={() => setIsSatellite(!isSatellite)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-lg shadow-lg"
-          >
-            🛰️
-          </button>
+    <div className="flex flex-col h-[calc(100vh-6rem)] gap-4 pb-20 lg:pb-0">
+      <div className="flex justify-between items-center">
+        <div>
+            <h1 className="text-2xl font-bold tracking-tight">Peta Tim & Alert</h1>
+            <p className="text-muted-foreground text-sm">Monitoring lokasi anggota dan alert secara realtime.</p>
         </div>
+        <Badge variant="outline" className="hidden sm:flex">{members.length} anggota online</Badge>
       </div>
 
-      {/* Member list */}
-      <div className="mx-5 mt-4">
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Anggota Online</h2>
-        <div className="max-h-[40vh] overflow-y-auto space-y-2">
-          {members.map((m: any) => (
-            <div
-              key={m.id}
-              onClick={() => m.last_lat && setFlyTo({ lat: m.last_lat, lng: m.last_lng })}
-              className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-3 active:bg-secondary transition-colors"
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full min-h-[500px]">
+         {/* Map Container - Takes 2 cols on desktop */}
+         <Card className="lg:col-span-2 overflow-hidden relative border shadow-md h-[50vh] lg:h-full rounded-xl">
+            <MapContainer
+              center={[-2.5, 118.0]}
+              zoom={5}
+              minZoom={5}
+              maxZoom={18}
+              maxBounds={[[-12, 94], [8, 142]]}
+              maxBoundsViscosity={1.0}
+              style={{ height: '100%', width: '100%', zIndex: 0 }}
             >
-              <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-foreground ${
-                m.role === 'COORDINATOR' ? 'bg-[hsl(var(--info-blue))]/20' : 'bg-[hsl(var(--success))]/20'
-              }`}>
-                {getInitials(m.name)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{m.name}</p>
-                <p className="text-xs text-muted-foreground">{m.role}</p>
-              </div>
-              {myPosition && m.last_lat && (
-                <span className="flex-shrink-0 text-xs text-muted-foreground">
-                  {calcDistance(myPosition.lat, myPosition.lng, m.last_lat, m.last_lng)} km
-                </span>
-              )}
+                <TileLayer url={tileUrl} attribution="Tiles © Esri / OSM" />
+                <MapController myPosition={myPosition} flyTo={flyTo} />
+
+                {/* My marker */}
+                {myPosition && (
+                    <Marker position={[myPosition.lat, myPosition.lng]} icon={createIcon('📍', 'hsl(217 91% 60%)', 44)}>
+                    <Popup><div className="text-sm font-semibold">{user?.name}<br /><span className="text-xs text-muted-foreground">Anda</span></div></Popup>
+                    </Marker>
+                )}
+
+                {/* Members */}
+                {members.map((m) => m.last_lat && m.last_lng && (
+                    <Marker
+                    key={m.id}
+                    position={[m.last_lat, m.last_lng]}
+                    icon={createIcon(getInitials(m.name), m.role === 'COORDINATOR' ? 'hsl(217 91% 60%)' : 'hsl(142 71% 45%)', 36)}
+                    >
+                    <Popup><div className="text-sm"><b>{m.name}</b><br /><span className="text-xs">{m.role}</span></div></Popup>
+                    </Marker>
+                ))}
+
+                {/* Active alerts */}
+                {activeAlerts.map((a) => a.lat && a.lng && (
+                    <Marker key={a.id} position={[a.lat, a.lng]} icon={createAlertIcon(a.type)}>
+                    <Popup>
+                        <div className="text-sm">
+                        <b style={{ color: 'hsl(0 84% 60%)' }}>⚠️ {a.type}</b><br />
+                        <span>{a.severity}</span><br />
+                        <span className="text-xs">{a.description || ''}</span>
+                        </div>
+                    </Popup>
+                    </Marker>
+                ))}
+            </MapContainer>
+            
+            {/* Controls overlay */}
+            <div className="absolute bottom-6 right-4 z-[400] flex flex-col gap-2">
+                <Button size="icon" variant="secondary" className="shadow-lg rounded-full h-12 w-12" onClick={() => myPosition && setFlyTo({ ...myPosition })}>
+                    <Locate className="h-6 w-6" />
+                </Button>
+                <Button size="icon" variant={isSatellite ? "default" : "secondary"} className="shadow-lg rounded-full h-12 w-12" onClick={() => setIsSatellite(!isSatellite)}>
+                    <Layers className="h-6 w-6" />
+                </Button>
             </div>
-          ))}
-          {members.length === 0 && (
-            <p className="py-4 text-center text-sm text-muted-foreground">Tidak ada anggota online</p>
-          )}
-        </div>
-      </div>
+         </Card>
 
-      <BottomNavigation />
+         {/* Sidebar List - Takes 1 col on desktop */}
+         <Card className="h-full flex flex-col overflow-hidden">
+            <CardHeader className="pb-3 border-b bg-muted/20">
+                <CardTitle className="text-base flex items-center gap-2">
+                    <User className="h-4 w-4" /> Anggota Online
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 p-0 overflow-hidden">
+                <ScrollArea className="h-full">
+                    <div className="p-4 space-y-3">
+                         {members.length === 0 ? (
+                            <div className="text-center text-muted-foreground py-8 text-sm">
+                                Tidak ada anggota online lain.
+                            </div>
+                         ) : (
+                             members.map((m) => (
+                                <div
+                                  key={m.id}
+                                  onClick={() => m.last_lat && setFlyTo({ lat: m.last_lat, lng: m.last_lng })}
+                                  className="flex cursor-pointer items-center gap-3 rounded-lg border bg-card p-3 hover:bg-accent transition-colors group"
+                                >
+                                  <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-foreground ring-2 ring-transparent group-hover:ring-primary/20 transition-all ${
+                                    m.role === 'COORDINATOR' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                                  }`}>
+                                    {getInitials(m.name)}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-foreground truncate">{m.name}</p>
+                                    <p className="text-xs text-muted-foreground">{m.role}</p>
+                                  </div>
+                                  {myPosition && m.last_lat && (
+                                    <div className="flex flex-col items-end">
+                                        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground bg-secondary/50 px-2 py-1 rounded">
+                                            <Navigation className="h-3 w-3" />
+                                            {calcDistance(myPosition.lat, myPosition.lng, m.last_lat, m.last_lng)} km
+                                        </span>
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                         )}
+                    </div>
+                </ScrollArea>
+            </CardContent>
+         </Card>
+      </div>
     </div>
   );
 };
