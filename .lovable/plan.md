@@ -1,62 +1,60 @@
 
 
-# Emergency Alert System — Implementation Plan
+# Implementation Plan: Alerts + Chat + Map + Profile
 
-## Phase 1: Foundation — Auth, Theme & Navigation
-- Set up dark theme color system (#0f1117 background, emergency red accents)
-- Add mobile viewport meta tags for Android optimization
-- Install Zustand for state management
-- Create **Login page** with siren icon + red glow, email/password fields, show/hide toggle
-- Create **Register page** with 5 fields (name, email, phone, password, confirm) + GPS location capture
-- Create **Pending page** with refresh status functionality
-- Build auth store (Zustand) with session persistence
-- Create protected route wrapper with loading spinner
-- Build **Bottom Navigation** (Home, Alerts, Map, Profile) fixed at bottom, 64px height
+## 1. Database Migration
 
-## Phase 2: Home & Panic Button
-- Build **Home page** with greeting header, date, GPS mode indicator
-- Create **Panic Button** — large red circle (w-44 h-44) with pulse animation
-- Implement 3-second hold mechanic with SVG progress ring
-- Add phone vibration on trigger completion
-- Build **Emergency Type Modal** — 5 options grid (Fire, Medical, Crime, Disaster, Help)
-- Description form + GPS capture → insert alert to Supabase
-- Show active alerts section with real-time subscription
-- Display online members with avatars
+Create `alert_responders` table (required for response tracking):
 
-## Phase 3: Alerts List & Detail with Chat
-- **Database**: Create `alert_responders` table with columns (alert_id, user_id, status, acknowledged_at, arrived_at) + RLS policies
-- Build **Alerts page** with Aktif/Riwayat tabs, alert cards with severity border colors
-- Build **Alert Detail page** with INFO and CHAT tabs
-- INFO tab: alert details, 3-step response status buttons (Acknowledged → En Route → Arrived)
-- CHAT tab: real-time messaging with left/right/system bubbles, auto-scroll, Supabase realtime subscription
+```sql
+CREATE TABLE public.alert_responders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  alert_id uuid NOT NULL REFERENCES public.alerts(id),
+  user_id uuid NOT NULL,
+  status text NOT NULL DEFAULT 'ACKNOWLEDGED',
+  acknowledged_at timestamptz,
+  en_route_at timestamptz,
+  arrived_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(alert_id, user_id)
+);
+```
 
-## Phase 4: Team Map
-- Install Leaflet + react-leaflet
-- Build **Map page** with satellite tile layer (Esri), bounded to Indonesia
-- Custom markers: blue (coordinator), green (member), red pulsing (active alerts)
-- My position marker (larger blue)
-- Member list below map with distance calculation (Haversine)
-- Tap member → fly to their location on map
-- Background GPS update to Supabase every 5 minutes
+With RLS policies for group-based SELECT, own INSERT/UPDATE, and admin ALL.
 
-## Phase 5: Profile & Settings
-- Build **Profile page** with avatar (initials), role badge, contact info
-- Show stats from database (alerts responded, alerts triggered)
-- Notification toggle (localStorage)
-- Change password modal with validation
-- Logout with confirmation dialog
+Also fix existing RLS: all current policies are still **RESTRICTIVE** (`Permissive: No`). They must be recreated as **PERMISSIVE** or nothing works. This migration will drop and recreate all existing policies as PERMISSIVE.
 
-## Phase 6: Real-time Notifications
-- Request browser notification permission on login
-- Global Supabase realtime listener for new alerts → browser notification + in-app banner
-- In-app alert banner: slides from top, auto-dismiss 8 seconds with countdown bar
-- Badge count on Alerts tab and bell icon (unacknowledged alerts)
+## 2. New Files to Create
 
-## Phase 7: Polish & PWA
-- Loading skeletons for all data-fetching screens
-- Empty states with emoji illustrations
-- Offline detection banner
-- Pull-to-refresh on Home and Alerts
-- PWA manifest + icons for "Add to Home Screen"
-- Ensure all touch targets ≥ 44px, font ≥ 14px, no horizontal overflow, bottom padding for nav
+| File | Purpose |
+|------|---------|
+| `src/pages/AlertDetail.tsx` | Detail page with INFO + CHAT tabs, realtime chat |
+| `src/pages/AlertsPage.tsx` | Rewrite of Alerts with Active/History tabs, response buttons |
+| `src/pages/MapPage.tsx` | Full Leaflet map with member markers, alert markers, member list |
+| `src/pages/ProfilePage.tsx` | Full profile with stats, password change, logout |
+
+## 3. Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/App.tsx` | Add route `/alerts/:id` for AlertDetail |
+| `package.json` | Add `leaflet`, `react-leaflet`, `@types/leaflet` |
+| `index.html` | Add Leaflet CSS link |
+
+## 4. Implementation Summary
+
+**Alerts Page**: Two tabs (Active/History) with realtime subscription. Each alert card shows severity border color, type emoji, reporter, time ago, and 3 response status buttons (Tahu/Menuju/Tiba) that upsert into `alert_responders`. "Lihat Chat" link navigates to detail.
+
+**Alert Detail**: Header with back button, alert info. Two tabs — INFO (location, reporter, description, responder list from `alert_responders`) and CHAT (realtime bubble chat using `chat_messages` with Supabase realtime INSERT listener, auto-scroll, Enter-to-send).
+
+**Map Page**: Leaflet with Esri satellite tiles, bounded to Indonesia. Custom div-icon markers for self (blue), coordinators (blue), members (green), active alerts (red+emoji). FAB buttons for recenter and tile toggle. Member list below map with Haversine distance, tap to flyTo. GPS position updated to Supabase every 5 minutes.
+
+**Profile Page**: Avatar with initials, role badge, contact info, stats from `alerts` count + `alert_responders` count. Notification toggle (localStorage). Password change via sheet/dialog with old password verification. Logout with confirm dialog.
+
+## 5. Technical Notes
+
+- All RLS policies will be converted from RESTRICTIVE to PERMISSIVE in the migration to fix the access denied issues
+- `alert_responders` needs a `users_select_group` policy so members can see responders in their group's alerts
+- Chat messages query joins with `users` table for sender name — the existing `users_select_own` policy blocks seeing other users' names. A new policy `users_select_active_members` for SELECT by active users in the same group will be added
+- Leaflet CSS loaded via CDN in index.html to avoid build issues
 
