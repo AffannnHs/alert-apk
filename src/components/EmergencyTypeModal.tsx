@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -25,64 +25,167 @@ interface EmergencyTypeModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+type GpsStatus = 'idle' | 'checking' | 'ready' | 'error';
+
+const isValidCoord = (lat: number, lng: number) => {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (lat === 0 && lng === 0) return false;
+  return true;
+};
+
+const getPositionOnce = (options: PositionOptions) =>
+  new Promise<GeolocationPosition>((resolve, reject) => {
+    if (!('geolocation' in navigator)) {
+      reject(new Error('Geolocation tidak didukung'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+
+const getAccuratePosition = async ({
+  maxAttempts,
+  maxAccuracy,
+}: {
+  maxAttempts: number;
+  maxAccuracy: number;
+}) => {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const pos = await getPositionOnce({
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      });
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy ?? Number.POSITIVE_INFINITY;
+      if (!isValidCoord(lat, lng)) {
+        lastError = new Error('Koordinat tidak valid');
+        continue;
+      }
+      if (accuracy <= maxAccuracy) return { lat, lng, accuracy };
+      lastError = new Error('Akurasi belum cukup');
+      await new Promise((r) => setTimeout(r, 600));
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError ?? new Error('Gagal mendapatkan lokasi');
+};
+
 const EmergencyTypeModal = ({ open, onOpenChange }: EmergencyTypeModalProps) => {
   const user = useAuthStore((s) => s.user);
   const [selected, setSelected] = useState<(typeof EMERGENCY_TYPES)[0] | null>(null);
   const [description, setDescription] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [phase, setPhase] = useState<'idle' | 'locating' | 'sending'>('idle');
+  const [gpsStatus, setGpsStatus] = useState<GpsStatus>('idle');
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const locateReqRef = useRef(0);
+
+  const locate = useCallback(async () => {
+    const reqId = ++locateReqRef.current;
+    setGpsStatus('checking');
+    setGpsCoords(null);
+    setGpsAccuracy(null);
+
+    try {
+      const { lat, lng, accuracy } = await getAccuratePosition({ maxAttempts: 3, maxAccuracy: 100 });
+      if (reqId !== locateReqRef.current) return;
+      setGpsCoords({ lat, lng });
+      setGpsAccuracy(accuracy);
+      setGpsStatus('ready');
+    } catch {
+      if (reqId !== locateReqRef.current) return;
+      setGpsCoords(null);
+      setGpsAccuracy(null);
+      setGpsStatus('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    setGpsStatus('idle');
+    setGpsCoords(null);
+    setGpsAccuracy(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !selected) return;
+    void locate();
+  }, [open, selected, locate]);
 
   const handleSubmit = async () => {
     if (!selected || !user) return;
-    setSubmitting(true);
+    if (phase !== 'idle') return;
 
-    let lat = user.last_lat ?? 0;
-    let lng = user.last_lng ?? 0;
+    setPhase('locating');
+    const toastId = toast.loading('Mendapatkan lokasi...');
 
-    // Try to get fresh GPS
     try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 5000,
-        })
-      );
-      lat = pos.coords.latitude;
-      lng = pos.coords.longitude;
+      const { lat, lng, accuracy } = await getAccuratePosition({ maxAttempts: 3, maxAccuracy: 100 });
+      if (!isValidCoord(lat, lng)) {
+        toast.dismiss(toastId);
+        toast.error('Aktifkan GPS dan coba lagi');
+        setPhase('idle');
+        return;
+      }
+
+      setGpsCoords({ lat, lng });
+      setGpsAccuracy(accuracy);
+      setGpsStatus('ready');
+
+      setPhase('sending');
+      toast.loading('Mengirim alert...', { id: toastId });
+
+      const { error } = await supabase.from('alerts').insert({
+        type: selected.type,
+        severity: selected.severity,
+        description: description.trim() || null,
+        lat,
+        lng,
+        triggered_by: user.id,
+        reporter_name: user.name,
+        trigger_source: 'PANIC_BUTTON',
+      });
+
+      if (error) {
+        toast.dismiss(toastId);
+        toast.error('Gagal mengirim alert. Coba lagi.');
+        setPhase('idle');
+        return;
+      }
+
+      toast.dismiss(toastId);
+      toast.success('🚨 Alert darurat terkirim!');
+      setSelected(null);
+      setDescription('');
+      onOpenChange(false);
     } catch {
-      // Use last known location
+      toast.dismiss(toastId);
+      toast.error('Aktifkan GPS dan coba lagi');
+      setGpsStatus('error');
+      setPhase('idle');
     }
-
-    const { error } = await supabase.from('alerts').insert({
-      type: selected.type,
-      severity: selected.severity,
-      description: description.trim() || null,
-      lat,
-      lng,
-      triggered_by: user.id,
-      reporter_name: user.name,
-      trigger_source: 'PANIC_BUTTON',
-    });
-
-    setSubmitting(false);
-
-    if (error) {
-      toast.error('Gagal mengirim alert. Coba lagi.');
-      return;
-    }
-
-    toast.success('🚨 Alert darurat terkirim!');
-    setSelected(null);
-    setDescription('');
-    onOpenChange(false);
   };
 
   const handleClose = () => {
-    if (!submitting) {
+    if (phase === 'idle') {
       setSelected(null);
       setDescription('');
       onOpenChange(false);
     }
   };
+
+  const canSend = Boolean(
+    selected &&
+      user &&
+      phase === 'idle' &&
+      gpsStatus === 'ready' &&
+      gpsCoords &&
+      isValidCoord(gpsCoords.lat, gpsCoords.lng),
+  );
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -124,12 +227,35 @@ const EmergencyTypeModal = ({ open, onOpenChange }: EmergencyTypeModalProps) => 
               className="min-h-[80px] resize-none border-border bg-secondary text-foreground"
               maxLength={500}
             />
+            <div className="flex items-center justify-between rounded-lg border border-border bg-secondary px-3 py-2 text-xs">
+              <span className="text-muted-foreground">
+                {gpsStatus === 'checking' && '📍 Mendapatkan lokasi...'}
+                {gpsStatus === 'ready' &&
+                  `✅ GPS aktif${gpsAccuracy != null ? ` (±${Math.round(gpsAccuracy)}m)` : ''}`}
+                {gpsStatus === 'error' && '⚠️ Aktifkan GPS dan coba lagi'}
+                {gpsStatus === 'idle' && '📍 Cek GPS...'}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={locate}
+                disabled={gpsStatus === 'checking' || phase !== 'idle'}
+                className="h-7 px-2 text-xs"
+              >
+                Coba lagi
+              </Button>
+            </div>
             <Button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={!canSend}
               className="w-full"
             >
-              {submitting ? 'Mengirim...' : `Kirim Alert ${selected.icon}`}
+              {phase === 'locating'
+                ? 'Mendapatkan lokasi...'
+                : phase === 'sending'
+                  ? 'Mengirim...'
+                  : `Kirim Alert ${selected.icon}`}
             </Button>
           </div>
         )}
