@@ -89,3 +89,16 @@
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+.leaflet-container {
+  z-index: 1 !important;
+}
+
+.leaflet-pane {
+  z-index: 1 !important;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 2 !important;
+}

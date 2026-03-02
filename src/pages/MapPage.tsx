@@ -142,7 +142,7 @@ const MapPage = () => {
               maxZoom={18}
               maxBounds={[[-12, 94], [8, 142]]}
               maxBoundsViscosity={1.0}
-              style={{ height: '100%', width: '100%', zIndex: 0 }}
+              style={{ height: '100%', width: '100%', zIndex: 1 }}
             >
                 <TileLayer url={tileUrl} attribution="Tiles © Esri / OSM" />
                 <MapController myPosition={myPosition} flyTo={flyTo} />
