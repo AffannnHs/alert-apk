@@ -11,6 +11,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import ProtectedRoute from '@/components/ProtectedRoute';
 import MainLayout from '@/components/MainLayout';
 import { BackgroundServiceInit } from "@/services/backgroundService";
+import { StatusBarInit } from "@/services/statusBarService";
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Pending from './pages/Pending';
@@ -126,6 +127,7 @@ const App = () => (
       <Analytics />
       <BrowserRouter>
         <AuthListener>
+          <StatusBarInit />
           <BackgroundServiceInit />
           <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />

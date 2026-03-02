@@ -25,6 +25,14 @@ type AlertResponderInsert = TablesInsert<"alert_responders">;
 type ResponderWithUser = AlertResponderRow & { user?: DbUserLite };
 type MessageWithSender = ChatMessageRow & { sender?: DbUserLite | null };
 
+const parseDateSafe = (value: string | null | undefined) => {
+  if (!value) return null;
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+};
+
 const AlertDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -38,6 +46,7 @@ const AlertDetail = () => {
   const [myStatus, setMyStatus] = useState<string | null>(null);
   const [chatCount, setChatCount] = useState(0);
   const [userCache, setUserCache] = useState<Record<string, DbUserLite>>({});
+  const [chatError, setChatError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -84,12 +93,17 @@ const AlertDetail = () => {
 
   const fetchMessages = useCallback(async () => {
     if (!id) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('chat_messages')
       .select('*')
       .eq('alert_id', id)
       .order('sent_at', { ascending: true });
+    if (error) {
+      setChatError('Chat gagal dimuat. Coba lagi.');
+      return;
+    }
     if (data) {
+      setChatError(null);
       const senderIds = [...new Set(data.map((m) => m.sender_id))];
       const umap = await fetchUsers(senderIds);
       setMessages(data.map((m) => ({ ...m, sender: umap[m.sender_id] ?? null })));
@@ -117,6 +131,7 @@ const AlertDetail = () => {
           .select('id, name, role')
           .eq('id', newMsg.sender_id)
           .single();
+        setChatError(null);
         setMessages(prev => [...prev, { ...newMsg, sender: sender ?? null }]);
         setChatCount(prev => prev + 1);
         scrollToBottom();
@@ -126,16 +141,29 @@ const AlertDetail = () => {
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchAlert, fetchResponders, fetchMessages]);
 
+  useEffect(() => {
+    if (activeTab !== 'chat') return;
+    const interval = setInterval(() => {
+      void fetchMessages();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [activeTab, fetchMessages]);
+
   const sendMessage = async () => {
     if (!newMessage.trim() || sending || !user || !id) return;
     setSending(true);
     const text = newMessage.trim();
     setNewMessage('');
-    await supabase.from('chat_messages').insert({
+    const { error } = await supabase.from('chat_messages').insert({
       alert_id: id,
       sender_id: user.id,
       message: text,
     });
+    if (error) {
+      setNewMessage(text);
+    } else {
+      void fetchMessages();
+    }
     setSending(false);
   };
 
@@ -158,7 +186,11 @@ const AlertDetail = () => {
   };
 
   const timeAgo = (d: string) => {
-    try { return formatDistanceToNow(new Date(d), { addSuffix: true, locale: idLocale }); }
+    try {
+      const parsed = parseDateSafe(d);
+      if (!parsed) return '';
+      return formatDistanceToNow(parsed, { addSuffix: true, locale: idLocale });
+    }
     catch { return ''; }
   };
 
@@ -294,6 +326,12 @@ const AlertDetail = () => {
               </span>
             </div>
 
+            {chatError && (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                {chatError}
+              </p>
+            )}
+
             {messages.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 Belum ada pesan. Mulai percakapan darurat.
@@ -347,7 +385,11 @@ const AlertDetail = () => {
                       )}
                       <p className="text-sm leading-relaxed">{msg.message}</p>
                       <p className={`mt-1 text-[10px] ${isMine ? 'text-right opacity-70' : 'text-muted-foreground'}`}>
-                        {format(new Date(msg.sent_at), 'HH:mm')}
+                        {(() => {
+                          const parsed = parseDateSafe(msg.sent_at);
+                          if (!parsed) return '';
+                          try { return format(parsed, 'HH:mm'); } catch { return ''; }
+                        })()}
                       </p>
                     </div>
                   </div>
